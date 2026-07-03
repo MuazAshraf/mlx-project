@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MLX Chat</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1d212b; --line: #2a2f3a;
+    --txt: #e6e9ef; --dim: #8b93a3; --accent: #5b9dff; --bad: #f85149; --user: #243049;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 -apple-system, system-ui, sans-serif;
+         background: var(--bg); color: var(--txt); height: 100vh; display: flex; }
+  button, select, textarea { font: inherit; }
+  button { cursor: pointer; }
+
+  aside { width: 280px; border-right: 1px solid var(--line); background: #12151b;
+          display: flex; flex-direction: column; min-width: 220px; }
+  .side-head { padding: 12px; border-bottom: 1px solid var(--line); display: flex; gap: 8px; }
+  .new { flex: 1; background: var(--accent); color: white; border: 0; border-radius: 7px;
+         padding: 8px 10px; }
+  #chats { overflow-y: auto; padding: 8px; }
+  .chat-item { width: 100%; text-align: left; border: 1px solid transparent; border-radius: 7px;
+               background: transparent; color: var(--txt); padding: 8px; margin-bottom: 4px;
+               display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; align-items: center; }
+  .chat-item:hover, .chat-item.active { background: var(--panel); border-color: var(--line); }
+  .ctitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .model-tag { color: var(--dim); font-size: 11px; }
+  .del { color: var(--dim); background: transparent; border: 0; border-radius: 5px; padding: 2px 6px; }
+  .del:hover { color: var(--bad); background: var(--panel2); }
+
+  main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  header { padding: 13px 18px; border-bottom: 1px solid var(--line); background: var(--panel);
+           display: flex; align-items: center; gap: 10px; }
+  header .dot { width: 9px; height: 9px; border-radius: 50%; background: #3fb950; }
+  header .t { font-weight: 600; }
+  header .s { color: var(--dim); font-size: 12px; }
+  header .spacer { margin-left: auto; }
+  header select, header .clear { background: var(--panel2); border: 1px solid var(--line);
+                  color: var(--dim); border-radius: 7px; padding: 5px 9px; }
+  header select:disabled, header .clear:disabled, .new:disabled { opacity: .45; cursor: not-allowed; }
+
+  #log { flex: 1; overflow-y: auto; padding: 18px; }
+  .msg { max-width: 760px; margin: 0 auto 14px; display: flex; gap: 10px; }
+  .msg .who { font-size: 11px; color: var(--dim); width: 42px; flex: none; padding-top: 3px; }
+  .msg .body { background: var(--panel); padding: 10px 13px; border-radius: 10px; flex: 1; }
+  .msg.user .body { background: var(--user); }
+  .think { margin-bottom: 8px; border-left: 2px solid var(--line); padding-left: 8px; }
+  .think summary { color: var(--dim); font-size: 12px; cursor: pointer; user-select: none; }
+  .think .rtext { color: var(--dim); font-style: italic; font-size: 13px; white-space: pre-wrap;
+                  margin-top: 6px; max-height: 240px; overflow-y: auto; }
+  .answer { white-space: pre-wrap; word-break: break-word; }
+  .tool { margin-bottom: 8px; font-size: 12px; font-family: ui-monospace, Menlo, monospace;
+          background: var(--panel2); border: 1px solid var(--line); border-radius: 7px;
+          padding: 6px 9px; color: var(--dim); }
+  .tool .name { color: var(--accent); }
+  .tool .res { color: var(--txt); white-space: pre-wrap; display: block; margin-top: 3px; }
+  .empty { color: var(--dim); text-align: center; margin-top: 32vh; }
+
+  #composer { border-top: 1px solid var(--line); background: var(--panel); padding: 12px 18px; }
+  #composer .row { max-width: 760px; margin: 0 auto; display: flex; gap: 8px; align-items: flex-end; }
+  #ta { flex: 1; resize: none; background: var(--panel2); color: var(--txt);
+        border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; max-height: 160px; }
+  button.send { background: var(--accent); color: #fff; border: 0; border-radius: 8px;
+                padding: 9px 16px; }
+  button.send:disabled { opacity: .4; cursor: not-allowed; }
+
+  @media (max-width: 760px) {
+    aside { width: 190px; }
+    .msg .who { display: none; }
+  }
+</style>
+</head>
+<body>
+  <aside>
+    <div class="side-head"><button class="new" id="newChat">New chat</button></div>
+    <div id="chats"></div>
+  </aside>
+  <main>
+    <header>
+      <span class="dot"></span>
+      <div><div class="t" id="mname">MLX Chat</div><div class="s">in-process · streaming</div></div>
+      <span class="spacer"></span>
+      <select id="model">
+        <option value="qwen35">Qwen3.5-27B Opus-Distilled 4bit</option>
+        <option value="qwen36">Qwen3.6-27B oQ8 MTP</option>
+        <option value="ds4">DeepSeek V4 Flash DS4</option>
+      </select>
+      <button class="clear" id="clear">New</button>
+    </header>
+    <div id="log"><div class="empty">Say something to start.</div></div>
+    <div id="composer">
+      <div class="row">
+        <textarea id="ta" rows="1" placeholder="Type a message..."></textarea>
+        <button class="send" id="send">Send</button>
+      </div>
+    </div>
+  </main>
+
+<script>
+const $ = s => document.querySelector(s);
+const modelSelect = $('#model');
+const staticModels = Array.from(modelSelect.options).map(opt => ({ key: opt.value, name: opt.textContent }));
+const ta = $('#ta');
+
+let chats = [];
+let currentChatId = null;
+let history = [];
+let currentModelKey = modelSelect.value;
+let switching = false;
+
+$('#send').onclick = send;
+$('#clear').onclick = () => newChat();
+$('#newChat').onclick = () => newChat();
+ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; });
+ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+modelSelect.onchange = () => changeCurrentModel(modelSelect.value);
+
+boot();
+
+async function boot() {
+  await initModels();
+  await loadChatList();
+  if (chats.length) await openChat(chats[0].id);
+  else await newChat();
+}
+
+async function initModels() {
+  try {
+    const d = await fetch('/api/models').then(r => r.json());
+    if (d.models && d.models.length) {
+      modelSelect.innerHTML = '';
+      for (const m of d.models) {
+        const opt = document.createElement('option');
+        opt.value = m.key; opt.textContent = m.name;
+        modelSelect.appendChild(opt);
+      }
+    }
+    if (d.current) {
+      modelSelect.value = d.current;
+      currentModelKey = d.current;
+    }
+  } catch (e) {}
+  setModelTitle(modelSelect.value);
+}
+
+function modelName(key) {
+  const options = modelSelect.options.length
+    ? Array.from(modelSelect.options).map(opt => ({ key: opt.value, name: opt.textContent }))
+    : staticModels;
+  const current = options.find(m => m.key === key);
+  return current ? current.name : key;
+}
+
+function setModelTitle(key) {
+  $('#mname').textContent = modelName(key);
+}
+
+async function loadChatList() {
+  const d = await fetch('/api/chats').then(r => r.json());
+  chats = d.chats || [];
+  renderSidebar();
+}
+
+function renderSidebar() {
+  const list = $('#chats');
+  list.innerHTML = '';
+  for (const chat of chats) {
+    const row = document.createElement('button');
+    row.className = 'chat-item' + (chat.id === currentChatId ? ' active' : '');
+    row.onclick = () => openChat(chat.id);
+
+    const title = document.createElement('div');
+    title.className = 'ctitle';
+    title.textContent = chat.title || 'New chat';
+    const del = document.createElement('button');
+    del.className = 'del';
+    del.textContent = 'x';
+    del.title = 'Delete chat';
+    del.onclick = e => { e.stopPropagation(); deleteChat(chat.id); };
+    const tag = document.createElement('div');
+    tag.className = 'model-tag';
+    tag.textContent = chat.model_key;
+
+    row.appendChild(title);
+    row.appendChild(del);
+    row.appendChild(tag);
+    list.appendChild(row);
+  }
+}
+
+async function newChat() {
+  setBusy(true);
+  const chat = await fetch('/api/chats', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: modelSelect.value })
+  }).then(r => r.json());
+  await loadChatList();
+  await openChat(chat.id);
+  setBusy(false);
+}
+
+async function openChat(id) {
+  const chat = await fetch(`/api/chats/${id}`).then(r => r.json());
+  currentChatId = chat.id;
+  history = chat.messages.map(m => ({ role: m.role, content: m.content }));
+  modelSelect.value = chat.model_key;
+  await ensureModel(chat.model_key);
+  setModelTitle(chat.model_key);
+  renderSidebar();
+  renderChat();
+}
+
+async function deleteChat(id) {
+  await fetch(`/api/chats/${id}`, { method: 'DELETE' });
+  if (id === currentChatId) {
+    currentChatId = null;
+    history = [];
+  }
+  await loadChatList();
+  if (!currentChatId) {
+    if (chats.length) await openChat(chats[0].id);
+    else await newChat();
+  } else {
+    renderSidebar();
+  }
+}
+
+async function changeCurrentModel(key) {
+  switching = true; setBusy(true);
+  $('#mname').textContent = 'Loading model...';
+  try {
+    await ensureModel(key);
+    if (currentChatId) {
+      await fetch(`/api/chats/${currentChatId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model_key: key })
+      });
+      await loadChatList();
+    }
+    setModelTitle(key);
+  } catch (e) {
+    showError(e.message);
+    modelSelect.value = currentModelKey;
+    setModelTitle(currentModelKey);
+  }
+  switching = false; setBusy(false);
+}
+
+async function ensureModel(key) {
+  if (key === currentModelKey) return;
+  const resp = await fetch('/api/model', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: key })
+  });
+  const d = await resp.json();
+  if (!resp.ok) throw new Error(d.detail || d.error || 'Model switch failed');
+  currentModelKey = d.current;
+}
+
+function renderChat() {
+  $('#log').innerHTML = '';
+  if (!history.length) {
+    $('#log').innerHTML = '<div class="empty">Say something to start.</div>';
+    return;
+  }
+  for (const m of history) {
+    if (m.role === 'user') addUser(m.content);
+    if (m.role === 'assistant') addAssistantText(m.content);
+  }
+}
+
+function setBusy(b) {
+  $('#send').disabled = b;
+  $('#newChat').disabled = b;
+  $('#clear').disabled = b;
+  modelSelect.disabled = b;
+  ta.disabled = b;
+  if (!b && !switching) ta.focus();
+}
+
+async function send() {
+  const text = ta.value.trim();
+  if (!text || switching || !currentChatId) return;
+  if ($('#log .empty')) $('#log').innerHTML = '';
+  setBusy(true);
+
+  await saveMessage('user', text);
+  history.push({ role: 'user', content: text });
+  addUser(text);
+  ta.value = ''; ta.style.height = 'auto';
+
+  const bot = addBot();
+  let acc = '', racc = '';
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: history })
+    });
+    const reader = resp.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const events = buf.split('\n\n'); buf = events.pop();
+      for (const ev of events) {
+        const line = ev.replace(/^data: /, '').trim();
+        if (!line) continue;
+        const o = JSON.parse(line);
+        if (o.reasoning) {
+          racc += o.reasoning; bot.think.style.display = '';
+          bot.rtext.textContent = racc; bot.summary.textContent = 'Thinking...'; scroll();
+        }
+        if (o.tool_call) { addTool(bot, o.tool_call); scroll(); }
+        if (o.tool_result) { setToolResult(bot, o.tool_result); scroll(); }
+        if (o.delta) { acc += o.delta; bot.answer.textContent = acc; scroll(); }
+        if (o.error) { bot.answer.innerHTML = `<span style="color:var(--bad)">${o.error}</span>`; }
+        if (o.done) {
+          const final = o.final || acc;
+          history.push({ role: 'assistant', content: final });
+          bot.answer.textContent = final;
+          if (racc) bot.summary.textContent = 'Thought process';
+          await saveMessage('assistant', final);
+          await loadChatList();
+        }
+      }
+    }
+  } catch (e) {
+    bot.answer.innerHTML = `<span style="color:var(--bad)">${e.message}</span>`;
+  }
+  setBusy(false);
+}
+
+async function saveMessage(role, content) {
+  await fetch(`/api/chats/${currentChatId}/messages`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role, content })
+  });
+}
+
+function addUser(text) {
+  const wrap = document.createElement('div'); wrap.className = 'msg user';
+  wrap.innerHTML = `<div class="who">You</div>`;
+  const body = document.createElement('div'); body.className = 'body answer';
+  body.textContent = text; wrap.appendChild(body);
+  $('#log').appendChild(wrap); scroll();
+}
+
+function addAssistantText(text) {
+  const bot = addBot();
+  bot.answer.textContent = text;
+}
+
+function addBot() {
+  const wrap = document.createElement('div'); wrap.className = 'msg bot';
+  wrap.innerHTML = `<div class="who">Bot</div>`;
+  const body = document.createElement('div'); body.className = 'body';
+  const think = document.createElement('details'); think.className = 'think'; think.style.display = 'none';
+  const summary = document.createElement('summary'); summary.textContent = 'Thinking...';
+  const rtext = document.createElement('div'); rtext.className = 'rtext';
+  think.appendChild(summary); think.appendChild(rtext);
+  const toolsEl = document.createElement('div');
+  const answer = document.createElement('div'); answer.className = 'answer';
+  body.appendChild(think); body.appendChild(toolsEl); body.appendChild(answer);
+  wrap.appendChild(body);
+  $('#log').appendChild(wrap); scroll();
+  return { think, summary, rtext, answer, toolsEl, lastTool: null };
+}
+
+function addTool(bot, call) {
+  const el = document.createElement('div'); el.className = 'tool';
+  const args = JSON.stringify(call.arguments || {});
+  el.innerHTML = `<span class="name">${call.name}</span>(${args})`;
+  bot.toolsEl.appendChild(el); bot.lastTool = el;
+}
+function setToolResult(bot, tr) {
+  if (!bot.lastTool) return;
+  const res = document.createElement('span'); res.className = 'res';
+  res.textContent = '-> ' + tr.result;
+  bot.lastTool.appendChild(res);
+}
+function showError(message) { $('#log').innerHTML = `<div class="empty" style="color:var(--bad)">${message}</div>`; }
+function scroll() { const l = $('#log'); l.scrollTop = l.scrollHeight; }
+</script>
+</body>
+</html>
